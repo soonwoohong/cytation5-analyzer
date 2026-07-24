@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Python-powered Cytation5 kinetic curves and fluorescence heatmaps in your browser."
+    />
+    <meta name="theme-color" content="#f7f9f8" />
+    <meta property="og:title" content="Cytation5 Analyzer" />
+    <meta
+      property="og:description"
+      content="Kinetic fluorescence curves, heatmaps, and editable plate maps."
+    />
+    <meta property="og:image" content="assets/og.png" />
+    <title>Cytation5 Analyzer</title>
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/pyodide/v0.29.4/full/pyodide.js"
+    ></script>
+    <script defer src="https://cdn.plot.ly/plotly-3.5.1.min.js"></script>
+    <script
+      defer
+      src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"
+    ></script>
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <div class="boot-screen" id="boot-screen" role="status" aria-live="polite">
+      <div class="boot-lockup">
+        <span class="brand-symbol large" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </span>
+        <strong>Cytation5 Analyzer</strong>
+      </div>
+      <div class="boot-progress" aria-hidden="true"><span></span></div>
+      <p id="boot-detail">Starting Python engine</p>
+    </div>
+
+    <header class="app-header">
+      <div class="brand-lockup">
+        <span class="brand-symbol" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </span>
+        <div>
+          <h1>Cytation5 Analyzer</h1>
+          <p>Python-powered plate-reader analysis</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span class="engine-badge" id="engine-badge">
+          <span class="engine-dot"></span>
+          <span id="engine-label">Python loading</span>
+        </span>
+        <a
+          class="icon-button"
+          href="https://github.com/soonwoohong/cytation5-analyzer"
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Open GitHub repository"
+          title="GitHub repository"
+        >
+          <i data-lucide="github"></i>
+        </a>
+      </div>
+    </header>
+
+    <div class="app-layout">
+      <aside class="control-panel" aria-label="Analysis controls">
+        <section class="control-section input-section">
+          <div class="section-title">
+            <span class="section-index">1</span>
+            <div>
+              <h2>Input files</h2>
+              <p>Raw data required</p>
+            </div>
+          </div>
+
+          <label class="file-field">
+            <span class="field-label">Cytation export</span>
+            <span class="file-drop" id="data-drop">
+              <span class="file-icon"><i data-lucide="upload"></i></span>
+              <span class="file-copy">
+                <strong id="data-file-name">Choose raw data</strong>
+                <small id="data-file-detail">XLSX, XLSM, CSV, or TSV</small>
+              </span>
+            </span>
+            <input
+              id="data-file"
+              type="file"
+              accept=".xlsx,.xlsm,.csv,.tsv,.txt"
+            />
+          </label>
+
+          <label class="file-field">
+            <span class="field-label">
+              Plate map
+              <span class="optional-label">Optional</span>
+            </span>
+            <span class="file-drop" id="mapping-drop">
+              <span class="file-icon"><i data-lucide="table-properties"></i></span>
+              <span class="file-copy">
+                <strong id="mapping-file-name">Choose plate map</strong>
+                <small id="mapping-file-detail">Or map wells after import</small>
+              </span>
+            </span>
+            <input
+              id="mapping-file"
+              type="file"
+              accept=".xlsx,.xlsm,.csv,.tsv,.txt"
+            />
+          </label>
+
+          <div class="command-row">
+            <button class="button primary" id="analyze-button" type="button">
+              <i data-lucide="play"></i>
+              Analyze
+            </button>
+            <button class="button secondary" id="demo-button" type="button">
+              <i data-lucide="rotate-ccw"></i>
+              Demo
+            </button>
+          </div>
+          <div class="status-line" id="status-line" aria-live="polite">
+            <span class="status-dot"></span>
+            <span id="status-copy">Preparing analysis engine</span>
+          </div>
+        </section>
+
+        <section class="control-section">
+          <div class="section-title compact">
+            <span class="section-index">2</span>
+            <h2>Figure</h2>
+          </div>
+
+          <label class="field">
+            <span>Title</span>
+            <input id="figure-title" type="text" value="Conserved target multiplexing" />
+          </label>
+
+          <div class="view-controls" data-control-view="kinetics">
+            <div class="field-row two">
+              <label class="field">
+                <span>Error</span>
+                <select id="error-mode">
+                  <option value="sd">SD band</option>
+                  <option value="sem">SEM band</option>
+                  <option value="none">None</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Legend</span>
+                <select id="legend-position">
+                  <option value="right">Right</option>
+                  <option value="bottom">Bottom</option>
+                  <option value="hidden">Hidden</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="field-row two">
+              <label class="field">
+                <span>Panel columns</span>
+                <input id="panel-columns" type="number" min="1" max="4" value="3" />
+              </label>
+              <label class="field">
+                <span>Y minimum</span>
+                <input id="y-min" type="number" placeholder="Auto" />
+              </label>
+            </div>
+
+            <label class="field">
+              <span>Y maximum</span>
+              <input id="y-max" type="number" placeholder="Auto" />
+            </label>
+
+            <label class="field">
+              <span>Line palette</span>
+              <select id="line-palette">
+                <option value="tableau">Tableau 10</option>
+                <option value="okabe">Okabe-Ito</option>
+                <option value="prism">Prism</option>
+                <option value="tol">Tol bright</option>
+                <option value="dark2">Dark 2</option>
+                <option value="set2">Set 2</option>
+                <option value="paired">Paired</option>
+                <option value="viridis">Viridis</option>
+                <option value="turbo">Turbo</option>
+                <option value="pastel">Pastel</option>
+              </select>
+              <span class="palette-preview" id="line-palette-preview"></span>
+            </label>
+
+            <label class="range-field">
+              <span>
+                <span>Line width</span>
+                <output id="line-width-value">2.2</output>
+              </span>
+              <input
+                id="line-width"
+                type="range"
+                min="0.8"
+                max="5"
+                step="0.2"
+                value="2.2"
+              />
+            </label>
+
+            <label class="toggle-field">
+              <span>
+                <strong>Baseline subtraction</strong>
+                <small>Subtract each well at t = 0</small>
+              </span>
+              <input id="baseline-toggle" type="checkbox" />
+            </label>
+
+            <label class="toggle-field">
+              <span><strong>Grid lines</strong></span>
+              <input id="grid-toggle" type="checkbox" checked />
+            </label>
+          </div>
+
+          <div class="view-controls hidden" data-control-view="heatmap">
+            <label class="field">
+              <span>Elapsed time</span>
+              <select id="heatmap-time"></select>
+            </label>
+
+            <div class="field-row two">
+              <label class="field">
+                <span>Color minimum</span>
+                <input id="color-min" type="number" placeholder="Auto" />
+              </label>
+              <label class="field">
+                <span>Color maximum</span>
+                <input id="color-max" type="number" placeholder="Auto" />
+              </label>
+            </div>
+
+            <label class="field">
+              <span>Heatmap palette</span>
+              <select id="heatmap-palette">
+                <option value="Viridis">Viridis</option>
+                <option value="Plasma">Plasma</option>
+                <option value="Magma">Magma</option>
+                <option value="Inferno">Inferno</option>
+                <option value="Cividis">Cividis</option>
+                <option value="Turbo">Turbo</option>
+                <option value="Blues">Blues</option>
+                <option value="YlGnBu">Yellow-green-blue</option>
+                <option value="RdBu">Red-blue</option>
+                <option value="Spectral">Spectral</option>
+              </select>
+              <span class="palette-preview" id="heatmap-palette-preview"></span>
+            </label>
+
+            <label class="toggle-field">
+              <span><strong>Reverse palette</strong></span>
+              <input id="reverse-palette" type="checkbox" />
+            </label>
+
+            <label class="toggle-field">
+              <span>
+                <strong>Cell values</strong>
+                <small>Show mean RFU</small>
+              </span>
+              <input id="annotation-toggle" type="checkbox" />
+            </label>
+          </div>
+        </section>
+
+        <section class="control-section">
+          <div class="section-title compact">
+            <span class="section-index">3</span>
+            <h2>Typography</h2>
+          </div>
+
+          <label class="field">
+            <span>Font</span>
+            <select id="font-family">
+              <option value="Arial, sans-serif">Arial</option>
+              <option value="Helvetica, Arial, sans-serif">Helvetica</option>
+              <option value="'DejaVu Sans', Arial, sans-serif">DejaVu Sans</option>
+              <option value="Georgia, serif">Georgia</option>
+              <option value="'Times New Roman', serif">Times New Roman</option>
+            </select>
+          </label>
+
+          <div class="font-grid">
+            <label class="field">
+              <span>Title</span>
+              <div class="input-unit"><input id="title-font" type="number" min="12" max="48" value="24" /><span>px</span></div>
+            </label>
+            <label class="field">
+              <span>Axes</span>
+              <div class="input-unit"><input id="axis-font" type="number" min="9" max="32" value="16" /><span>px</span></div>
+            </label>
+            <label class="field">
+              <span>Ticks</span>
+              <div class="input-unit"><input id="tick-font" type="number" min="8" max="28" value="13" /><span>px</span></div>
+            </label>
+            <label class="field">
+              <span>Legend</span>
+              <div class="input-unit"><input id="legend-font" type="number" min="8" max="28" value="12" /><span>px</span></div>
+            </label>
+          </div>
+        </section>
+
+        <section class="control-section export-section">
+          <div class="section-title compact">
+            <span class="section-index">4</span>
+            <h2>Export</h2>
+          </div>
+          <div class="export-grid">
+            <button class="button secondary" id="export-png" type="button">
+              <i data-lucide="image-down"></i>
+              PNG
+            </button>
+            <button class="button secondary" id="export-svg" type="button">
+              <i data-lucide="file-down"></i>
+              SVG
+            </button>
+            <button class="button secondary" id="export-csv" type="button">
+              <i data-lucide="sheet"></i>
+              CSV
+            </button>
+          </div>
+        </section>
+      </aside>
+
+      <main class="results-panel">
+        <section class="analysis-header">
+          <div class="analysis-title">
+            <span class="eyebrow">Current analysis</span>
+            <h2 id="source-name">Synthetic Cytation5 demo</h2>
+            <p id="mapping-mode">Synthetic 96-well map</p>
+          </div>
+          <div class="metric-strip">
+            <div class="metric"><strong id="metric-wells">48</strong><span>Wells</span></div>
+            <div class="metric"><strong id="metric-series">24</strong><span>Series</span></div>
+            <div class="metric"><strong id="metric-panels">3</strong><span>Panels</span></div>
+            <div class="metric"><strong id="metric-times">9</strong><span>Time points</span></div>
+          </div>
+        </section>
+
+        <nav class="view-tabs" aria-label="Analysis views">
+          <button class="view-tab active" data-view="kinetics" type="button">
+            <i data-lucide="chart-no-axes-combined"></i>
+            Kinetic curves
+          </button>
+          <button class="view-tab" data-view="heatmap" type="button">
+            <i data-lucide="grid-3x3"></i>
+            Heatmap
+          </button>
+          <button class="view-tab" data-view="mapping" type="button">
+            <i data-lucide="table-properties"></i>
+            Plate map
+            <span class="tab-count" id="mapping-count">48</span>
+          </button>
+        </nav>
+
+        <section class="figure-workspace" id="figure-workspace">
+          <div class="plot-toolbar">
+            <div class="plot-context">
+              <span id="plot-kicker">Mean RFU over time</span>
+              <strong id="plot-detail">Mean with SD across replicate wells</strong>
+            </div>
+            <button
+              class="icon-button compact"
+              id="reset-zoom"
+              type="button"
+              aria-label="Reset plot axes"
+              title="Reset axes"
+            >
+              <i data-lucide="scan"></i>
+            </button>
+          </div>
+          <div class="plot-stage">
+            <div id="plot" role="img" aria-label="Cytation5 analysis figure"></div>
+            <div class="plot-loading hidden" id="plot-loading" role="status">
+              <i data-lucide="loader-circle"></i>
+              <span>Updating figure</span>
+            </div>
+          </div>
+          <div class="figure-note" id="figure-note">
+            <span id="note-primary">3 crRNA panels</span>
+            <span id="note-secondary">Replicate mean and SD</span>
+          </div>
+        </section>
+
+        <section class="mapping-workspace hidden" id="mapping-workspace">
+          <div class="mapping-toolbar">
+            <div class="mapping-filter">
+              <i data-lucide="search"></i>
+              <input
+                id="mapping-filter"
+                type="search"
+                placeholder="Filter wells, targets, or crRNAs"
+                aria-label="Filter plate map"
+              />
+            </div>
+            <div class="mapping-actions">
+              <button class="button tertiary" id="select-visible" type="button">
+                <i data-lucide="check-check"></i>
+                Include visible
+              </button>
+              <button class="button tertiary" id="exclude-visible" type="button">
+                <i data-lucide="x"></i>
+                Exclude visible
+              </button>
+              <button class="button tertiary" id="reset-well-map" type="button">
+                <i data-lucide="rotate-ccw"></i>
+                Use well IDs
+              </button>
+              <button class="button secondary" id="paste-map-button" type="button">
+                <i data-lucide="clipboard-paste"></i>
+                Paste table
+              </button>
+              <button class="icon-button compact" id="download-map" type="button" aria-label="Download plate map" title="Download map">
+                <i data-lucide="download"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="mapping-summary">
+            <span><strong id="included-wells">48</strong> included</span>
+            <span><strong id="visible-wells">48</strong> visible</span>
+            <span>Edits update both figures</span>
+          </div>
+
+          <div class="mapping-table-wrap">
+            <table class="mapping-table">
+              <thead>
+                <tr>
+                  <th class="include-column">Use</th>
+                  <th class="well-column">Well</th>
+                  <th>Target / condition</th>
+                  <th>crRNA / assay</th>
+                  <th class="replicate-column">Replicate</th>
+                </tr>
+              </thead>
+              <tbody id="mapping-table-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="paste-map-dialog">
+      <form method="dialog" class="dialog-shell">
+        <div class="dialog-header">
+          <div>
+            <span class="eyebrow">Plate map</span>
+            <h2>Paste mapping table</h2>
+          </div>
+          <button class="icon-button compact" value="cancel" aria-label="Close dialog" title="Close">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <label class="field">
+          <span>CSV or tab-delimited table</span>
+          <textarea
+            id="paste-map-text"
+            rows="12"
+            placeholder="well,target,crRNA,replicate,include&#10;A1,IS6110,crRNA2 for IS6110,1,true"
+          ></textarea>
+        </label>
+        <p class="dialog-error hidden" id="paste-map-error"></p>
+        <div class="dialog-actions">
+          <button class="button tertiary" value="cancel">Cancel</button>
+          <button class="button primary" id="apply-pasted-map" type="button">
+            <i data-lucide="check"></i>
+            Apply table
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast hidden" id="toast" role="status" aria-live="polite">
+      <i data-lucide="circle-check"></i>
+      <span id="toast-copy"></span>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cytation5-analyzer"
+version = "0.2.0"
+description = "Parse Cytation5 kinetic fluorescence exports and optional plate maps."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Soonwoo Hong" }]
+keywords = ["cytation5", "plate-reader", "fluorescence", "kinetics", "heatmap"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = []
+
+[project.scripts]
+cytation5-analyzer = "cytation5_analyzer.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

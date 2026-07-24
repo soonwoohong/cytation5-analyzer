@@ -1,70 +1,96 @@
 # Cytation5 Analyzer
 
-A browser-based prototype for turning paired Cytation5 plate-reader exports
-and 96- or 384-well maps into target-by-crRNA fluorescence heatmaps.
+A Python-powered browser application for Cytation5 kinetic fluorescence
+curves, target-by-crRNA heatmaps, and editable 96- or 384-well mappings.
 
-[Open the public prototype](https://cytation5-analyzer.hopefullife7.chatgpt.site)
+[Open the GitHub Pages application](https://soonwoohong.github.io/cytation5-analyzer/)
 
-The app processes files locally in the browser. Experimental data is not sent
-to a server or stored by the application.
+Raw files are processed locally in the browser. The application does not
+upload or store experimental data.
 
-## Prototype Features
+## Analysis Workflow
 
-- Raw Cytation5 `.xlsx`, `.xls`, `.csv`, and `.tsv` import
-- Grid-style or flat plate-map import
-- Duplicate workbook-sheet detection
-- Mean RFU heatmaps at any sampled elapsed time
-- Target and crRNA ordering inherited from the plate map
-- Viridis, magma, and cividis color palettes
-- Optional cell annotations and manual color-scale maximum
-- PNG, SVG, and mean-RFU matrix CSV export
-- Synthetic multiplexing demo available on first load
+- Import a raw Cytation5 `.xlsx`, `.xlsm`, `.csv`, `.tsv`, or `.txt` export.
+- Optionally import a grid-style or flat plate map.
+- Plot every detected well by its plate address when no map is supplied.
+- Edit well, target, crRNA, replicate, and inclusion fields in the plate-map
+  table or paste a CSV/TSV table directly into the application.
+- Plot replicate-mean kinetic curves in crRNA facets with optional SD or SEM.
+- Apply per-well baseline subtraction and customize line width, panel count,
+  legend placement, axes, fonts, and categorical palettes.
+- Generate mean-RFU heatmaps at any sampled elapsed time with ten palettes,
+  reversible scales, optional annotations, and manual color limits.
+- Export figures as PNG or SVG and analysis tables as CSV.
 
-## Input Pair
+## Python Architecture
 
-The raw data file should be a direct Cytation5 export containing a `Time`
-column and well columns such as `A1`, `A2`, or `P24`.
+The analysis engine is a standard Python package under
+`src/cytation5_analyzer/`. It owns Cytation parsing, duplicate-sheet
+detection, optional mapping, replicate aggregation, baseline subtraction,
+kinetic summaries, and heatmap matrices.
 
-The mapping file may be either:
+The GitHub Pages interface loads that same package with Pyodide and renders
+the returned analysis with Plotly.js. JavaScript is limited to browser file
+handling, controls, the editable mapping table, and interactive rendering.
 
-1. A 96/384-well grid export containing a `96 maps` or `384 maps` marker and
-   cells such as:
+The XLSX reader uses Python's standard ZIP and XML libraries, so the package
+has no runtime dependencies.
 
-   ```text
-   target: IS6110
-   crRNA: crRNA2 for IS6110
-   ```
+## Plate Maps
 
-2. A flat table with `well`, `target` (or `condition`), and `crRNA` (or
-   `assay`) columns.
+A plate map may be:
 
-## Development
+- A 96/384-well grid containing a `96 maps` or `384 maps` marker and cells
+  with `target:` and `crRNA:` entries.
+- A flat table with `well`, `target` (or `condition`), and `crRNA` (or
+  `assay`) columns. `replicate` and `include` columns are optional.
 
-Requires Node.js 22 or newer and pnpm.
+When no plate map is supplied, each raw well is included with:
 
-```bash
-pnpm install
-pnpm dev
+```text
+target = well address
+crRNA = Plate wells
+replicate = 1
 ```
 
-Open `http://localhost:3000`.
+## Python Package
 
-## Checks
+Install the package in editable mode:
 
 ```bash
-pnpm exec tsc --noEmit
-pnpm test
+python -m pip install -e .
 ```
 
-The parser tests include a synthetic Cytation export and plate map. The
-prototype was also validated locally against a 48-well, 28-time-point
-Cytation5 experiment without publishing that experimental dataset.
+Inspect a Cytation export:
 
-## Prototype Scope
+```bash
+cytation5-analyzer raw_data.xlsx --mapping plate_map.csv
+```
 
-This first version focuses on fluorescence heatmaps. Kinetic line plots,
-baseline subtraction, normalization, statistical testing, and reusable plate
-map editing are natural next iterations.
+## Local Web Development
+
+Build and serve the same static artifact used by GitHub Pages:
+
+```bash
+python scripts/build_site.py
+python -m http.server 8000 --directory _site
+```
+
+Open `http://localhost:8000/`.
+
+The first visit downloads the pinned Pyodide and Plotly runtimes; later
+visits use the browser cache.
+
+## Tests
+
+```bash
+PYTHONPATH=src python -m unittest discover -s tests -p "test_*.py" -v
+```
+
+Tests cover optional and imported maps, replicate aggregation, baseline
+subtraction, pasted map tables, XLSX parsing, and the GitHub Pages artifact.
+The parser is also validated locally against the supplied Cytation5 datasets
+without adding those experimental files to the repository.
 
 ## License
 
