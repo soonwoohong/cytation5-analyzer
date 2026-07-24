@@ -78,8 +78,8 @@ python -m http.server 8000 --directory _site
 
 Open `http://localhost:8000/`.
 
-The first visit downloads the pinned Pyodide and Plotly runtimes; later
-visits use the browser cache.
+The first visit loads the bundled Pyodide runtime and pinned Plotly runtime;
+later visits use the browser cache.
 
 ## Tests
 
@@ -94,4 +94,6 @@ without adding those experimental files to the repository.
 
 ## License
 
-MIT
+The application is MIT licensed. The bundled Pyodide runtime is distributed
+under the Mozilla Public License 2.0; its license is included at
+`web/vendor/pyodide/LICENSE`.

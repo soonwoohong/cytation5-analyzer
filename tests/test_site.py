@@ -34,8 +34,19 @@ class SiteBuildTests(unittest.TestCase):
             self.assertIn('view: "kinetics"', javascript)
             self.assertIn("load_upload_from_files", javascript)
             self.assertNotIn("chatgpt.site", html)
+            self.assertIn("vendor/pyodide/pyodide.js", html)
+            self.assertNotIn("cdn.jsdelivr.net/pyodide", html)
             self.assertTrue(
                 (destination / "python" / "cytation5_analyzer" / "core.py").is_file()
+            )
+            self.assertTrue(
+                (destination / "vendor" / "pyodide" / "pyodide.asm.wasm").is_file()
+            )
+            self.assertTrue(
+                (destination / "vendor" / "pyodide" / "python_stdlib.zip").is_file()
+            )
+            self.assertTrue(
+                (destination / "vendor" / "pyodide" / "LICENSE").is_file()
             )
             self.assertTrue((destination / ".nojekyll").is_file())
 

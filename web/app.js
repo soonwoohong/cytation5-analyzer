@@ -2,7 +2,6 @@
 
 "use strict";
 
-const PYODIDE_VERSION = "0.29.4";
 const PYTHON_FILES = [
   "__init__.py",
   "xlsx.py",
@@ -166,7 +165,7 @@ async function initialize() {
   try {
     setBootDetail("Loading Python runtime");
     state.pyodide = await loadPyodide({
-      indexURL: `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`,
+      indexURL: new URL("vendor/pyodide/", document.baseURI).href,
     });
     setBootDetail("Loading Cytation analysis package");
     await loadPythonSources();
