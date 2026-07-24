@@ -3,6 +3,8 @@
 A browser-based prototype for turning paired Cytation5 plate-reader exports
 and 96- or 384-well maps into target-by-crRNA fluorescence heatmaps.
 
+[Open the public prototype](https://cytation5-analyzer.hopefullife7.chatgpt.site)
+
 The app processes files locally in the browser. Experimental data is not sent
 to a server or stored by the application.
 
