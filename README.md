@@ -15,12 +15,16 @@ upload or store experimental data.
 - Plot every detected well by its plate address when no map is supplied.
 - Edit well, target, crRNA, replicate, and inclusion fields in the plate-map
   table or paste a CSV/TSV table directly into the application.
-- Plot replicate-mean kinetic curves in crRNA facets with optional SD or SEM.
-- Apply per-well baseline subtraction and customize line width, panel count,
-  legend placement, axes, fonts, and categorical palettes.
+- Plot replicate-mean kinetic curves in crRNA facets with an SD band, SD error
+  bars, or no error display.
+- Apply per-well baseline subtraction and customize line width, line style,
+  panel count, legend placement, axes, typography, and publication palettes.
+- Automatically render targets containing `NTC` with dashed lines.
 - Generate mean-RFU heatmaps at any sampled elapsed time with ten palettes,
   reversible scales, optional annotations, and manual color limits.
-- Export figures as PNG or SVG and analysis tables as CSV.
+- Inspect mappings as editable tables or visual 96/384-well plate layouts.
+- Export 16:9 figures as PNG or SVG, analysis tables as CSV, and reusable
+  figure settings as JSON.
 
 ## Python Architecture
 

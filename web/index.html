@@ -143,8 +143,8 @@
               <label class="field">
                 <span>Error</span>
                 <select id="error-mode">
-                  <option value="sd">SD band</option>
-                  <option value="sem">SEM band</option>
+                  <option value="band">SD band</option>
+                  <option value="bars">SD error bars</option>
                   <option value="none">None</option>
                 </select>
               </label>
@@ -177,6 +177,7 @@
             <label class="field">
               <span>Line palette</span>
               <select id="line-palette">
+                <option value="publication">Publication vivid</option>
                 <option value="tableau">Tableau 10</option>
                 <option value="okabe">Okabe-Ito</option>
                 <option value="prism">Prism</option>
@@ -191,32 +192,51 @@
               <span class="palette-preview" id="line-palette-preview"></span>
             </label>
 
+            <div class="field-row two">
+              <label class="field">
+                <span>Line style</span>
+                <select id="line-style">
+                  <option value="auto">Auto (NTC dashed)</option>
+                  <option value="solid">Solid</option>
+                  <option value="dash">Dashed</option>
+                  <option value="dot">Dotted</option>
+                  <option value="dashdot">Dash-dot</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Line width</span>
+                <div class="input-unit">
+                  <input
+                    id="line-width-number"
+                    type="number"
+                    min="0.5"
+                    max="8"
+                    step="0.1"
+                    value="2.5"
+                  />
+                  <span>px</span>
+                </div>
+              </label>
+            </div>
+
             <label class="range-field">
               <span>
-                <span>Line width</span>
-                <output id="line-width-value">2.2</output>
+                <span>Width adjustment</span>
+                <output id="line-width-value">2.5</output>
               </span>
               <input
                 id="line-width"
                 type="range"
-                min="0.8"
-                max="5"
-                step="0.2"
-                value="2.2"
+                min="0.5"
+                max="8"
+                step="0.1"
+                value="2.5"
               />
             </label>
 
             <label class="toggle-field">
-              <span>
-                <strong>Baseline subtraction</strong>
-                <small>Subtract each well at t = 0</small>
-              </span>
-              <input id="baseline-toggle" type="checkbox" />
-            </label>
-
-            <label class="toggle-field">
               <span><strong>Grid lines</strong></span>
-              <input id="grid-toggle" type="checkbox" checked />
+              <input id="grid-toggle" type="checkbox" />
             </label>
           </div>
 
@@ -267,6 +287,39 @@
               <input id="annotation-toggle" type="checkbox" />
             </label>
           </div>
+
+          <div class="view-controls hidden" data-control-view="plate">
+            <div class="field-row two">
+              <label class="field">
+                <span>Plate format</span>
+                <select id="plate-format">
+                  <option value="auto">Auto</option>
+                  <option value="96">96-well</option>
+                  <option value="384">384-well</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Color by</span>
+                <select id="plate-color-by">
+                  <option value="target">Target</option>
+                  <option value="crrna">crRNA</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <label class="toggle-field" id="baseline-control">
+            <span>
+              <strong>Baseline subtraction</strong>
+              <small>Subtract each well at t = 0</small>
+            </span>
+            <input id="baseline-toggle" type="checkbox" />
+          </label>
+
+          <label class="toggle-field" id="interactive-control">
+            <span><strong>Interactive plot</strong></span>
+            <input id="interactive-toggle" type="checkbox" />
+          </label>
         </section>
 
         <section class="control-section">
@@ -286,24 +339,13 @@
             </select>
           </label>
 
-          <div class="font-grid">
-            <label class="field">
-              <span>Title</span>
-              <div class="input-unit"><input id="title-font" type="number" min="12" max="48" value="24" /><span>px</span></div>
-            </label>
-            <label class="field">
-              <span>Axes</span>
-              <div class="input-unit"><input id="axis-font" type="number" min="9" max="32" value="16" /><span>px</span></div>
-            </label>
-            <label class="field">
-              <span>Ticks</span>
-              <div class="input-unit"><input id="tick-font" type="number" min="8" max="28" value="13" /><span>px</span></div>
-            </label>
-            <label class="field">
-              <span>Legend</span>
-              <div class="input-unit"><input id="legend-font" type="number" min="8" max="28" value="12" /><span>px</span></div>
-            </label>
-          </div>
+          <label class="field">
+            <span>Figure text (titles +2)</span>
+            <div class="input-unit">
+              <input id="base-font" type="number" min="8" max="28" value="13" />
+              <span>px</span>
+            </div>
+          </label>
         </section>
 
         <section class="control-section export-section">
@@ -324,6 +366,17 @@
               <i data-lucide="sheet"></i>
               CSV
             </button>
+          </div>
+          <div class="settings-grid">
+            <button class="button tertiary" id="save-settings" type="button">
+              <i data-lucide="save"></i>
+              Save settings
+            </button>
+            <button class="button tertiary" id="load-settings" type="button">
+              <i data-lucide="folder-open"></i>
+              Load settings
+            </button>
+            <input id="settings-file" type="file" accept=".json,application/json" hidden />
           </div>
         </section>
       </aside>
@@ -352,9 +405,13 @@
             <i data-lucide="grid-3x3"></i>
             Heatmap
           </button>
+          <button class="view-tab" data-view="plate" type="button">
+            <i data-lucide="layout-grid"></i>
+            Plate layout
+          </button>
           <button class="view-tab" data-view="mapping" type="button">
             <i data-lucide="table-properties"></i>
-            Plate map
+            Mapping table
             <span class="tab-count" id="mapping-count">48</span>
           </button>
         </nav>
@@ -362,11 +419,11 @@
         <section class="figure-workspace" id="figure-workspace">
           <div class="plot-toolbar">
             <div class="plot-context">
-              <span id="plot-kicker">Mean RFU over time</span>
-              <strong id="plot-detail">Mean with SD across replicate wells</strong>
+              <span id="plot-kicker">Fluorescence intensity over time</span>
+              <strong id="plot-detail">Replicate mean with SD band</strong>
             </div>
             <button
-              class="icon-button compact"
+              class="icon-button compact hidden"
               id="reset-zoom"
               type="button"
               aria-label="Reset plot axes"
@@ -386,6 +443,20 @@
             <span id="note-primary">3 crRNA panels</span>
             <span id="note-secondary">Replicate mean and SD</span>
           </div>
+        </section>
+
+        <section class="plate-workspace hidden" id="plate-workspace">
+          <div class="plate-toolbar">
+            <div class="plot-context">
+              <span>Measured wells</span>
+              <strong id="plate-detail">96-well plate · colored by target</strong>
+            </div>
+            <span class="plate-summary" id="plate-summary">48 mapped wells</span>
+          </div>
+          <div class="plate-scroll">
+            <div class="plate-grid" id="plate-grid" role="grid" aria-label="Plate layout"></div>
+          </div>
+          <div class="plate-legend" id="plate-legend"></div>
         </section>
 
         <section class="mapping-workspace hidden" id="mapping-workspace">

@@ -10,6 +10,20 @@ const PYTHON_FILES = [
 ];
 
 const LINE_PALETTES = {
+  publication: [
+    "#E41A1C",
+    "#377EB8",
+    "#4DAF4A",
+    "#984EA3",
+    "#FF7F00",
+    "#D6A400",
+    "#A65628",
+    "#F781BF",
+    "#666666",
+    "#00A6D6",
+    "#1B9E77",
+    "#D95F02",
+  ],
   tableau: [
     "#4E79A7",
     "#F28E2B",
@@ -137,6 +151,31 @@ const HEATMAP_PALETTES = {
   Spectral: ["#9E0142", "#F46D43", "#FFFFBF", "#66C2A5", "#5E4FA2"],
 };
 
+const SETTINGS_CONTROL_IDS = [
+  "figure-title",
+  "error-mode",
+  "legend-position",
+  "panel-columns",
+  "y-min",
+  "y-max",
+  "line-palette",
+  "line-style",
+  "line-width-number",
+  "baseline-toggle",
+  "grid-toggle",
+  "interactive-toggle",
+  "heatmap-time",
+  "color-min",
+  "color-max",
+  "heatmap-palette",
+  "reverse-palette",
+  "annotation-toggle",
+  "plate-format",
+  "plate-color-by",
+  "font-family",
+  "base-font",
+];
+
 const state = {
   pyodide: null,
   pythonReady: false,
@@ -161,6 +200,8 @@ async function initialize() {
   bindEvents();
   updatePalettePreviews();
   setControlsEnabled(false);
+  updateResetZoomVisibility();
+  updateExportAvailability();
 
   try {
     setBootDetail("Loading Python runtime");
@@ -238,25 +279,27 @@ function bindEvents() {
     "y-min",
     "y-max",
     "line-palette",
+    "line-style",
     "line-width",
+    "line-width-number",
     "baseline-toggle",
     "grid-toggle",
+    "interactive-toggle",
     "heatmap-time",
     "color-min",
     "color-max",
     "heatmap-palette",
     "reverse-palette",
     "annotation-toggle",
+    "plate-format",
+    "plate-color-by",
     "font-family",
-    "title-font",
-    "axis-font",
-    "tick-font",
-    "legend-font",
+    "base-font",
   ];
   for (const id of renderControls) {
     byId(id).addEventListener("input", () => {
-      if (id === "line-width") {
-        byId("line-width-value").textContent = byId(id).value;
+      if (id === "line-width" || id === "line-width-number") {
+        syncLineWidth(id);
       }
       if (
         id === "line-palette" ||
@@ -264,6 +307,9 @@ function bindEvents() {
         id === "reverse-palette"
       ) {
         updatePalettePreviews();
+      }
+      if (id === "interactive-toggle") {
+        updateResetZoomVisibility();
       }
       scheduleRender();
     });
@@ -287,6 +333,11 @@ function bindEvents() {
   byId("export-png").addEventListener("click", () => exportFigure("png"));
   byId("export-svg").addEventListener("click", () => exportFigure("svg"));
   byId("export-csv").addEventListener("click", exportCurrentCsv);
+  byId("save-settings").addEventListener("click", saveSettings);
+  byId("load-settings").addEventListener("click", () =>
+    byId("settings-file").click(),
+  );
+  byId("settings-file").addEventListener("change", loadSettings);
   byId("reset-zoom").addEventListener("click", resetPlotAxes);
 
   window.addEventListener("resize", () => {
@@ -449,6 +500,7 @@ async function adoptSession(payload) {
   state.heatmap = null;
   populateTimepoints(payload.timepoints);
   renderMappingTable();
+  renderPlateLayout();
   updateAnalysisHeader();
   switchView("kinetics", false);
   await renderCurrentView();
@@ -479,12 +531,19 @@ function switchView(view, shouldRender = true) {
   document.querySelectorAll("[data-control-view]").forEach((section) => {
     section.classList.toggle("hidden", section.dataset.controlView !== view);
   });
-  byId("figure-workspace").classList.toggle("hidden", view === "mapping");
+  const isPlotView = view === "kinetics" || view === "heatmap";
+  byId("figure-workspace").classList.toggle("hidden", !isPlotView);
+  byId("plate-workspace").classList.toggle("hidden", view !== "plate");
   byId("mapping-workspace").classList.toggle("hidden", view !== "mapping");
-  byId("reset-zoom").classList.toggle("hidden", view === "mapping");
+  byId("baseline-control").classList.toggle("hidden", !isPlotView);
+  byId("interactive-control").classList.toggle("hidden", !isPlotView);
+  updateResetZoomVisibility();
+  updateExportAvailability();
 
   if (view === "mapping") {
     filterMappingRows();
+  } else if (view === "plate") {
+    renderPlateLayout();
   } else if (shouldRender) {
     renderCurrentView();
   }
@@ -494,12 +553,21 @@ function scheduleRender() {
   if (!state.session || state.view === "mapping") {
     return;
   }
+  if (state.view === "plate") {
+    renderPlateLayout();
+    return;
+  }
   window.clearTimeout(state.renderTimer);
   state.renderTimer = window.setTimeout(renderCurrentView, 140);
 }
 
 async function renderCurrentView() {
-  if (!state.session || !state.pythonReady || state.view === "mapping") {
+  if (
+    !state.session ||
+    !state.pythonReady ||
+    state.view === "mapping" ||
+    state.view === "plate"
+  ) {
     return;
   }
   const sequence = ++state.renderSequence;
@@ -547,7 +615,8 @@ async function renderCurrentView() {
 }
 
 function renderKineticPlot(result) {
-  const palette = LINE_PALETTES[byId("line-palette").value];
+  const palette =
+    LINE_PALETTES[byId("line-palette").value] || LINE_PALETTES.publication;
   const errorMode = byId("error-mode").value;
   const compactViewport = window.innerWidth <= 560;
   const columns = compactViewport
@@ -558,6 +627,10 @@ function renderKineticPlot(result) {
         Math.max(1, Math.min(4, result.panels.length)),
       );
   const rows = Math.max(1, Math.ceil(result.panels.length / columns));
+  byId("figure-workspace").style.setProperty(
+    "--plot-mobile-height",
+    `${Math.max(620, rows * 260 + 250)}px`,
+  );
   const targets = result.target_order;
   const colors = new Map(
     targets.map((target, index) => [target, palette[index % palette.length]]),
@@ -565,13 +638,13 @@ function renderKineticPlot(result) {
   const traces = [];
   const annotations = [];
   const legendSeen = new Set();
-  let anyUncertaintyBand = false;
+  let anyUncertainty = false;
   const fontFamily = byId("font-family").value;
-  const axisFont = numberValue("axis-font", 16);
-  const tickFont = numberValue("tick-font", 13);
-  const legendFont = numberValue("legend-font", 12);
-  const lineWidth = numberValue("line-width", 2.2);
+  const baseFont = clamp(Math.round(numberValue("base-font", 13)), 8, 28);
+  const titleAxisFont = baseFont + 2;
+  const lineWidth = clamp(numberValue("line-width-number", 2.5), 0.5, 8);
   const showGrid = byId("grid-toggle").checked;
+  const interactive = byId("interactive-toggle").checked;
   const legendPosition = compactViewport
     ? "bottom"
     : byId("legend-position").value;
@@ -592,15 +665,14 @@ function renderKineticPlot(result) {
       const color = colors.get(series.target) || "#46555B";
       const x = series.points.map((point) => point.time);
       const y = series.points.map((point) => point.mean);
-      const uncertainty = series.points.map((point) =>
-        errorMode === "none" ? 0 : point[errorMode],
-      );
-      const hasBand = uncertainty.some((value) => value > 0);
-      if (hasBand) {
-        anyUncertaintyBand = true;
+      const sd = series.points.map((point) => Number(point.sd) || 0);
+      const hasSd = sd.some((value) => value > 0);
+      const dash = seriesLineDash(series.target);
+      if (errorMode === "band" && hasSd) {
+        anyUncertainty = true;
         traces.push({
           x,
-          y: y.map((value, index) => value + uncertainty[index]),
+          y: y.map((value, index) => value + sd[index]),
           xaxis: xAxis,
           yaxis: yAxis,
           mode: "lines",
@@ -611,17 +683,20 @@ function renderKineticPlot(result) {
         });
         traces.push({
           x,
-          y: y.map((value, index) => value - uncertainty[index]),
+          y: y.map((value, index) => value - sd[index]),
           xaxis: xAxis,
           yaxis: yAxis,
           mode: "lines",
           line: { color, width: 0 },
           fill: "tonexty",
-          fillcolor: hexToRgba(color, 0.15),
+          fillcolor: hexToRgba(color, 0.18),
           hoverinfo: "skip",
           showlegend: false,
           legendgroup: series.target,
         });
+      }
+      if (errorMode === "bars" && hasSd) {
+        anyUncertainty = true;
       }
       const showLegend = !legendSeen.has(series.target);
       legendSeen.add(series.target);
@@ -640,7 +715,18 @@ function renderKineticPlot(result) {
         name: series.target,
         legendgroup: series.target,
         showlegend: showLegend,
-        line: { color, width: lineWidth },
+        line: { color, width: lineWidth, dash },
+        error_y:
+          errorMode === "bars" && hasSd
+            ? {
+                type: "data",
+                array: sd,
+                visible: true,
+                color: hexToRgba(color, 0.82),
+                thickness: 1.1,
+                width: 3,
+              }
+            : undefined,
         hovertemplate:
           `<b>${escapeHtml(series.target)}</b><br>` +
           "Time: %{x:g} min<br>Mean: %{y:,.1f} RFU<br>" +
@@ -650,7 +736,7 @@ function renderKineticPlot(result) {
 
     annotations.push({
       x: 0.5,
-      y: 1.035,
+      y: 1.055,
       xref: xReference,
       yref: yReference,
       text: escapeHtml(panel.crrna),
@@ -660,24 +746,68 @@ function renderKineticPlot(result) {
       font: {
         family: fontFamily,
         size: compactViewport
-          ? Math.min(15, Math.max(12, axisFont))
-          : Math.max(12, axisFont),
+          ? Math.min(15, Math.max(12, titleAxisFont))
+          : titleAxisFont,
         color: "#263237",
       },
     });
   });
 
+  const yAxisLabel = byId("baseline-toggle").checked
+    ? "Δ fluorescence intensity (a.u.)"
+    : "Fluorescence intensity (a.u.)";
+  annotations.push(
+    {
+      x: 0.5,
+      y: -0.105,
+      xref: "paper",
+      yref: "paper",
+      text: "Time (min)",
+      showarrow: false,
+      xanchor: "center",
+      yanchor: "top",
+      font: {
+        family: fontFamily,
+        size: titleAxisFont,
+        color: "#263237",
+      },
+    },
+    {
+      x: compactViewport ? -0.12 : -0.105,
+      y: 0.5,
+      xref: "paper",
+      yref: "paper",
+      text: yAxisLabel,
+      textangle: -90,
+      showarrow: false,
+      xanchor: "center",
+      yanchor: "middle",
+      font: {
+        family: fontFamily,
+        size: titleAxisFont,
+        color: "#263237",
+      },
+    },
+  );
+
+  const rightMargin =
+    legendPosition === "right"
+      ? estimateLegendMargin(targets, baseFont)
+      : compactViewport
+      ? 24
+      : 48;
   const layout = {
+    autosize: true,
     title: {
       text: escapeHtml(figureTitle()),
       x: 0.5,
-      y: 0.985,
+      y: 0.99,
       xanchor: "center",
       font: {
         family: fontFamily,
         size: compactViewport
-          ? Math.min(22, numberValue("title-font", 24))
-          : numberValue("title-font", 24),
+          ? Math.min(18, titleAxisFont)
+          : titleAxisFont,
         color: "#182124",
       },
     },
@@ -686,30 +816,30 @@ function renderKineticPlot(result) {
       columns,
       pattern: "independent",
       roworder: "top to bottom",
-      xgap: compactViewport ? 0 : 0.09,
-      ygap: compactViewport ? 0.1 : 0.16,
+      xgap: compactViewport ? 0 : 0.17,
+      ygap: compactViewport ? 0.2 : 0.22,
     },
     annotations,
     margin: {
-      l: compactViewport ? 61 : 76,
-      r: legendPosition === "right" ? 185 : 44,
-      t: 142,
-      b: legendPosition === "bottom" ? 145 : 68,
+      l: compactViewport ? 72 : 94,
+      r: rightMargin,
+      t: compactViewport ? 108 : 118,
+      b: legendPosition === "bottom" ? 178 : 92,
     },
-    height: Math.max(540, rows * (compactViewport ? 300 : 330) + 150),
     paper_bgcolor: "#FFFFFF",
     plot_bgcolor: "#FFFFFF",
-    hovermode: "closest",
+    hovermode: interactive ? "closest" : false,
     legend: {
-      x: legendPosition === "bottom" ? 0.5 : 1.02,
-      y: legendPosition === "bottom" ? -0.13 : 1,
+      x: legendPosition === "bottom" ? 0.5 : 1.035,
+      y: legendPosition === "bottom" ? -0.185 : 1,
       xanchor: legendPosition === "bottom" ? "center" : "left",
       yanchor: legendPosition === "bottom" ? "top" : "top",
       orientation: legendPosition === "bottom" ? "h" : "v",
       bgcolor: "rgba(255,255,255,0)",
       borderwidth: 0,
-      font: { family: fontFamily, size: legendFont, color: "#344147" },
-      tracegroupgap: 2,
+      font: { family: fontFamily, size: baseFont, color: "#344147" },
+      itemsizing: "constant",
+      tracegroupgap: 4,
     },
     showlegend: legendPosition !== "hidden",
     font: { family: fontFamily, color: "#263237" },
@@ -720,40 +850,35 @@ function renderKineticPlot(result) {
     const axisNumber = panelIndex + 1;
     const suffix = axisNumber === 1 ? "" : String(axisNumber);
     const row = Math.floor(panelIndex / columns);
-    const column = panelIndex % columns;
     layout[`xaxis${suffix}`] = {
-      title:
-        row === rows - 1 || compactViewport
-          ? { text: "Time (min)", font: { family: fontFamily, size: axisFont } }
-          : undefined,
-      tickfont: { family: fontFamily, size: tickFont, color: "#4C5B60" },
+      title: undefined,
+      tickfont: { family: fontFamily, size: baseFont, color: "#344147" },
+      showticklabels: row === rows - 1,
       showgrid: showGrid,
-      gridcolor: "#E2E7E5",
+      gridcolor: "#E4E8E7",
       gridwidth: 1,
       zeroline: false,
       showline: true,
-      linecolor: "#5F6B70",
-      linewidth: 1,
+      linecolor: "#263237",
+      linewidth: 1.2,
       ticks: "outside",
+      tickcolor: "#263237",
+      fixedrange: !interactive,
       automargin: true,
     };
     layout[`yaxis${suffix}`] = {
-      title:
-        column === 0
-          ? {
-              text: byId("baseline-toggle").checked ? "ΔRFU" : "Mean RFU",
-              font: { family: fontFamily, size: axisFont },
-            }
-          : undefined,
-      tickfont: { family: fontFamily, size: tickFont, color: "#4C5B60" },
+      title: undefined,
+      tickfont: { family: fontFamily, size: baseFont, color: "#344147" },
       showgrid: showGrid,
-      gridcolor: "#E2E7E5",
+      gridcolor: "#E4E8E7",
       gridwidth: 1,
       zeroline: false,
       showline: true,
-      linecolor: "#5F6B70",
-      linewidth: 1,
+      linecolor: "#263237",
+      linewidth: 1.2,
       ticks: "outside",
+      tickcolor: "#263237",
+      fixedrange: !interactive,
       automargin: true,
       matches: axisNumber === 1 ? undefined : "y",
       range: yRange,
@@ -761,14 +886,16 @@ function renderKineticPlot(result) {
   });
 
   Plotly.react(byId("plot"), traces, layout, plotConfig("kinetic_curves"));
-  byId("plot-kicker").textContent = "Mean RFU over time";
+  byId("plot-kicker").textContent = "Fluorescence intensity over time";
   const includedWells = state.mapping.filter((item) => item.include).length;
   byId("plot-detail").textContent =
-    !anyUncertaintyBand && result.target_order.length === includedWells
+    !anyUncertainty && result.target_order.length === includedWells
       ? "Individual well traces"
       : errorMode === "none"
       ? "Replicate mean"
-      : `Replicate mean with ${errorMode.toUpperCase()} band`;
+      : errorMode === "bars"
+      ? "Replicate mean with SD error bars"
+      : "Replicate mean with SD band";
   byId("note-primary").textContent =
     `${result.panels.length} ${plural(result.panels.length, "crRNA panel")}`;
   byId("note-secondary").textContent =
@@ -777,7 +904,9 @@ function renderKineticPlot(result) {
 
 function renderHeatmapPlot(result) {
   const fontFamily = byId("font-family").value;
-  const tickFont = numberValue("tick-font", 13);
+  const baseFont = clamp(Math.round(numberValue("base-font", 13)), 8, 28);
+  const titleAxisFont = baseFont + 2;
+  const interactive = byId("interactive-toggle").checked;
   const annotationText = result.matrix.map((row) =>
     row.map((value) => (value === null ? "" : formatCompact(value))),
   );
@@ -801,14 +930,16 @@ function renderHeatmapPlot(result) {
       "<br>SD: %{customdata[1]:,.1f}<br>n: %{customdata[0]}<extra></extra>",
     colorbar: {
       title: {
-        text: byId("baseline-toggle").checked ? "Mean ΔRFU" : "Mean RFU",
+        text: byId("baseline-toggle").checked
+          ? "Δ fluorescence intensity (a.u.)"
+          : "Fluorescence intensity (a.u.)",
         side: "right",
         font: {
           family: fontFamily,
-          size: numberValue("axis-font", 16),
+          size: titleAxisFont,
         },
       },
-      tickfont: { family: fontFamily, size: tickFont },
+      tickfont: { family: fontFamily, size: baseFont },
       thickness: 19,
       len: 0.78,
       outlinewidth: 0.7,
@@ -819,35 +950,37 @@ function renderHeatmapPlot(result) {
     trace.texttemplate = "%{text}";
     trace.textfont = {
       family: fontFamily,
-      size: Math.max(8, Math.min(tickFont, 14)),
+      size: Math.max(8, Math.min(baseFont, 14)),
     };
   }
 
   const layout = {
+    autosize: true,
     title: {
       text: escapeHtml(figureTitle()),
       x: 0.5,
       xanchor: "center",
       font: {
         family: fontFamily,
-        size: numberValue("title-font", 24),
+        size: titleAxisFont,
         color: "#182124",
       },
     },
-    margin: { l: 170, r: 125, t: 88, b: 150 },
-    height: Math.max(555, result.crrnas.length * 58 + 270),
+    margin: { l: 170, r: 145, t: 94, b: 150 },
     paper_bgcolor: "#FFFFFF",
     plot_bgcolor: "#FFFFFF",
+    hovermode: interactive ? "closest" : false,
     xaxis: {
       title: {
         text: "Target",
         font: {
           family: fontFamily,
-          size: numberValue("axis-font", 16),
+          size: titleAxisFont,
         },
       },
       tickangle: result.targets.length > 5 ? -35 : 0,
-      tickfont: { family: fontFamily, size: tickFont },
+      tickfont: { family: fontFamily, size: baseFont },
+      fixedrange: !interactive,
       automargin: true,
       side: "bottom",
     },
@@ -856,10 +989,11 @@ function renderHeatmapPlot(result) {
         text: "crRNA",
         font: {
           family: fontFamily,
-          size: numberValue("axis-font", 16),
+          size: titleAxisFont,
         },
       },
-      tickfont: { family: fontFamily, size: tickFont },
+      tickfont: { family: fontFamily, size: baseFont },
+      fixedrange: !interactive,
       automargin: true,
       autorange: "reversed",
     },
@@ -868,12 +1002,132 @@ function renderHeatmapPlot(result) {
   };
 
   Plotly.react(byId("plot"), [trace], layout, plotConfig("fluorescence_heatmap"));
-  byId("plot-kicker").textContent = "Mean fluorescence matrix";
+  byId("plot-kicker").textContent = "Fluorescence intensity matrix";
   byId("plot-detail").textContent = formatMinutes(result.selected_time);
   byId("note-primary").textContent =
     `${result.crrnas.length} crRNAs × ${result.targets.length} targets`;
   byId("note-secondary").textContent =
     `Nearest sampled time: ${formatMinutes(result.selected_time)}`;
+}
+
+function renderPlateLayout() {
+  if (!state.session) {
+    return;
+  }
+  const format = resolvePlateFormat();
+  const dimensions =
+    format === 384
+      ? { rows: 16, columns: 24, wellSize: 22 }
+      : { rows: 8, columns: 12, wellSize: 34 };
+  const colorField = byId("plate-color-by").value;
+  const palette =
+    LINE_PALETTES[byId("line-palette").value] || LINE_PALETTES.publication;
+  const mapped = new Map(
+    state.mapping.map((item) => [String(item.well).toUpperCase(), item]),
+  );
+  const represented = state.mapping.filter((item) => {
+    const address = parseWellAddress(item.well);
+    return (
+      address &&
+      address.row < dimensions.rows &&
+      address.column <= dimensions.columns
+    );
+  });
+  const groups = orderedUnique(
+    represented.map((item) => String(item[colorField] || "Unassigned")),
+  );
+  const colors = new Map(
+    groups.map((group, index) => [group, palette[index % palette.length]]),
+  );
+  const cells = ['<span class="plate-corner" aria-hidden="true"></span>'];
+  for (let column = 1; column <= dimensions.columns; column += 1) {
+    cells.push(
+      `<span class="plate-column-label" role="columnheader">${column}</span>`,
+    );
+  }
+  for (let row = 0; row < dimensions.rows; row += 1) {
+    const rowName = String.fromCharCode(65 + row);
+    cells.push(
+      `<span class="plate-row-label" role="rowheader">${rowName}</span>`,
+    );
+    for (let column = 1; column <= dimensions.columns; column += 1) {
+      const well = `${rowName}${column}`;
+      const item = mapped.get(well);
+      if (!item) {
+        cells.push(
+          `<span class="plate-well empty" role="gridcell" aria-label="${well}, empty"></span>`,
+        );
+        continue;
+      }
+      const group = String(item[colorField] || "Unassigned");
+      const color = colors.get(group) || "#7A868A";
+      const stateLabel = item.include ? "included" : "excluded";
+      const title =
+        `${well}\nTarget: ${item.target}\ncrRNA: ${item.crrna}\n${stateLabel}`;
+      cells.push(`
+        <span
+          class="plate-well ${item.include ? "" : "excluded"}"
+          role="gridcell"
+          aria-label="${escapeAttribute(title)}"
+          title="${escapeAttribute(title)}"
+          style="--well-color: ${color}"
+        ><span>${format === 96 ? well : ""}</span></span>`);
+    }
+  }
+
+  const grid = byId("plate-grid");
+  grid.dataset.format = String(format);
+  grid.style.setProperty("--plate-columns", String(dimensions.columns));
+  grid.style.setProperty("--well-size", `${dimensions.wellSize}px`);
+  grid.innerHTML = cells.join("");
+
+  const maximumLegendItems = 24;
+  const legendItems = groups.slice(0, maximumLegendItems).map(
+    (group) => `
+      <span class="plate-legend-item">
+        <span class="plate-swatch" style="--well-color: ${colors.get(group)}"></span>
+        <span>${escapeHtml(group)}</span>
+      </span>`,
+  );
+  if (groups.length > maximumLegendItems) {
+    legendItems.push(
+      `<span class="plate-legend-more">+${groups.length - maximumLegendItems} more</span>`,
+    );
+  }
+  byId("plate-legend").innerHTML = legendItems.join("");
+
+  const activeCount = represented.filter((item) => item.include).length;
+  const outsideCount = state.mapping.length - represented.length;
+  byId("plate-detail").textContent =
+    `${format}-well plate | colored by ${colorField === "crrna" ? "crRNA" : "target"}`;
+  byId("plate-summary").textContent =
+    outsideCount > 0
+      ? `${activeCount} included | ${outsideCount} outside layout`
+      : `${activeCount} included wells`;
+}
+
+function resolvePlateFormat() {
+  const selected = byId("plate-format").value;
+  if (selected === "96" || selected === "384") {
+    return Number(selected);
+  }
+  return state.mapping.some((item) => {
+    const address = parseWellAddress(item.well);
+    return address && (address.row >= 8 || address.column > 12);
+  })
+    ? 384
+    : 96;
+}
+
+function parseWellAddress(well) {
+  const match = /^([A-P])(\d{1,2})$/i.exec(String(well).trim());
+  if (!match) {
+    return null;
+  }
+  return {
+    row: match[1].toUpperCase().charCodeAt(0) - 65,
+    column: Number(match[2]),
+  };
 }
 
 function renderMappingTable() {
@@ -1061,7 +1315,10 @@ function updatePalettePreviews() {
 }
 
 function exportFigure(format) {
-  if (state.view === "mapping" || !state.session) {
+  if (
+    !state.session ||
+    (state.view !== "kinetics" && state.view !== "heatmap")
+  ) {
     return;
   }
   const filename = figureSlug(
@@ -1071,13 +1328,11 @@ function exportFigure(format) {
       : "kinetic_curves",
   );
   const plot = byId("plot");
-  const width = Math.max(1000, plot.clientWidth);
-  const height = Math.max(600, plot.clientHeight);
   Plotly.downloadImage(plot, {
     format,
     filename,
-    width,
-    height,
+    width: 1600,
+    height: 900,
     scale: format === "png" ? 2 : 1,
   });
 }
@@ -1086,7 +1341,7 @@ function exportCurrentCsv() {
   if (!state.session) {
     return;
   }
-  if (state.view === "mapping") {
+  if (state.view === "mapping" || state.view === "plate") {
     downloadMapping();
     return;
   }
@@ -1119,6 +1374,93 @@ function downloadMapping() {
   );
 }
 
+function saveSettings() {
+  const settings = {};
+  for (const id of SETTINGS_CONTROL_IDS) {
+    const control = byId(id);
+    settings[id] =
+      control.type === "checkbox" ? control.checked : control.value;
+  }
+  const view = ["kinetics", "heatmap", "plate"].includes(state.view)
+    ? state.view
+    : "kinetics";
+  const payload = {
+    schema: "cytation5-analyzer-settings",
+    version: 1,
+    view,
+    settings,
+  };
+  downloadText(
+    `${JSON.stringify(payload, null, 2)}\n`,
+    `${figureSlug(figureTitle(), "settings")}.json`,
+    "application/json;charset=utf-8",
+  );
+  showToast("Figure settings saved");
+}
+
+async function loadSettings(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) {
+    return;
+  }
+  try {
+    const payload = JSON.parse(await file.text());
+    if (
+      payload.schema !== "cytation5-analyzer-settings" ||
+      payload.version !== 1 ||
+      !payload.settings ||
+      typeof payload.settings !== "object"
+    ) {
+      throw new Error("This is not a Cytation5 Analyzer settings file.");
+    }
+    applySettings(payload.settings);
+    updatePalettePreviews();
+    updateResetZoomVisibility();
+    const view = ["kinetics", "heatmap", "plate"].includes(payload.view)
+      ? payload.view
+      : state.view;
+    switchView(view);
+    showToast("Figure settings loaded");
+  } catch (error) {
+    console.error(error);
+    setStatus(readError(error), "error");
+  } finally {
+    event.target.value = "";
+  }
+}
+
+function applySettings(settings) {
+  for (const id of SETTINGS_CONTROL_IDS) {
+    if (!(id in settings)) {
+      continue;
+    }
+    const control = byId(id);
+    const value = settings[id];
+    if (control.type === "checkbox") {
+      control.checked = value === true || value === "true";
+      continue;
+    }
+    if (control.tagName === "SELECT") {
+      const options = [...control.options];
+      if (options.some((option) => option.value === String(value))) {
+        control.value = String(value);
+      } else if (id === "heatmap-time" && options.length) {
+        const numericValue = Number(value);
+        const nearest = options.reduce((best, option) =>
+          Math.abs(Number(option.value) - numericValue) <
+          Math.abs(Number(best.value) - numericValue)
+            ? option
+            : best,
+        );
+        control.value = nearest.value;
+      }
+      continue;
+    }
+    control.value = String(value ?? "");
+  }
+  syncLineWidth("line-width-number");
+}
+
 function callPythonString(functionName, ...args) {
   const names = args.map((_, index) => `_web_string_arg_${index}`);
   names.forEach((name, index) => state.pyodide.globals.set(name, args[index]));
@@ -1130,6 +1472,9 @@ function callPythonString(functionName, ...args) {
 }
 
 function resetPlotAxes() {
+  if (!byId("interactive-toggle").checked) {
+    return;
+  }
   const plot = byId("plot");
   if (!plot.layout) {
     return;
@@ -1144,16 +1489,34 @@ function resetPlotAxes() {
 }
 
 function plotConfig(stem) {
+  const interactive = byId("interactive-toggle").checked;
   return {
     responsive: true,
     displaylogo: false,
-    scrollZoom: true,
+    staticPlot: !interactive,
+    displayModeBar: interactive ? "hover" : false,
+    scrollZoom: interactive,
     modeBarButtonsToRemove: ["lasso2d", "select2d"],
     toImageButtonOptions: {
       format: "svg",
       filename: figureSlug(figureTitle(), stem),
     },
   };
+}
+
+function updateResetZoomVisibility() {
+  const isPlotView = state.view === "kinetics" || state.view === "heatmap";
+  byId("reset-zoom").classList.toggle(
+    "hidden",
+    !isPlotView || !byId("interactive-toggle").checked,
+  );
+}
+
+function updateExportAvailability() {
+  const isPlotView = state.view === "kinetics" || state.view === "heatmap";
+  byId("export-png").disabled = !state.session || !isPlotView;
+  byId("export-svg").disabled = !state.session || !isPlotView;
+  byId("export-csv").disabled = !state.session;
 }
 
 function inferYMaximum(result) {
@@ -1223,6 +1586,39 @@ function figureTitle() {
 function numberValue(id, fallback) {
   const value = Number(byId(id).value);
   return Number.isFinite(value) ? value : fallback;
+}
+
+function syncLineWidth(sourceId) {
+  const parsed = Number(byId(sourceId).value);
+  if (!Number.isFinite(parsed)) {
+    return;
+  }
+  const value = Math.round(clamp(parsed, 0.5, 8) * 10) / 10;
+  byId("line-width").value = String(value);
+  byId("line-width-number").value = String(value);
+  byId("line-width-value").textContent = value.toFixed(1);
+}
+
+function seriesLineDash(label) {
+  const selected = byId("line-style").value;
+  if (selected !== "auto") {
+    return selected;
+  }
+  return /(^|[^a-z0-9])ntc([^a-z0-9]|$)/i.test(String(label))
+    ? "dash"
+    : "solid";
+}
+
+function estimateLegendMargin(labels, fontSize) {
+  const longest = labels.reduce(
+    (maximum, label) => Math.max(maximum, String(label).length),
+    0,
+  );
+  return clamp(Math.ceil(longest * fontSize * 0.58 + 92), 210, 390);
+}
+
+function orderedUnique(values) {
+  return [...new Set(values)];
 }
 
 function optionalNumber(id) {

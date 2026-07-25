@@ -615,6 +615,13 @@ textarea:focus-visible,
   grid-template-columns: repeat(3, 1fr);
 }
 
+.settings-grid {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 8px;
+}
+
 .results-panel {
   min-width: 0;
   background: var(--canvas);
@@ -785,7 +792,8 @@ textarea:focus-visible,
 .plot-stage {
   position: relative;
   width: 100%;
-  min-height: 530px;
+  min-height: 0;
+  aspect-ratio: 16 / 9;
   border: 1px solid var(--line);
   background: var(--surface);
   overflow: hidden;
@@ -793,7 +801,8 @@ textarea:focus-visible,
 
 #plot {
   width: 100%;
-  min-height: 530px;
+  height: 100%;
+  min-height: 0;
 }
 
 .plot-loading {
@@ -831,6 +840,150 @@ textarea:focus-visible,
 
 .mapping-workspace {
   padding: 18px 24px 24px;
+}
+
+.plate-workspace {
+  padding: 18px 24px 24px;
+}
+
+.plate-toolbar {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+}
+
+.plate-summary {
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.plate-scroll {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  overflow: auto;
+  padding: 20px;
+}
+
+.plate-grid {
+  display: grid;
+  width: max-content;
+  min-width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  grid-template-columns: 26px repeat(
+      var(--plate-columns),
+      var(--well-size)
+    );
+}
+
+.plate-grid[data-format="384"] {
+  gap: 4px;
+}
+
+.plate-corner,
+.plate-column-label,
+.plate-row-label {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 720;
+}
+
+.plate-column-label {
+  width: var(--well-size);
+}
+
+.plate-row-label {
+  height: var(--well-size);
+}
+
+.plate-well {
+  --well-color: #aeb8b4;
+
+  display: grid;
+  width: var(--well-size);
+  height: var(--well-size);
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--well-color) 72%, #263237);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--well-color) 76%, white);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55);
+  color: #172024;
+  font-size: 7px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 760;
+}
+
+.plate-well.empty {
+  border-color: #d8dfdc;
+  background: #f7f9f8;
+  box-shadow: none;
+}
+
+.plate-well.excluded {
+  border-style: dashed;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.75) 0,
+      rgba(255, 255, 255, 0.75) 3px,
+      transparent 3px,
+      transparent 6px
+    ),
+    color-mix(in srgb, var(--well-color) 45%, white);
+  opacity: 0.72;
+}
+
+.plate-grid[data-format="384"] .plate-well {
+  box-shadow: none;
+}
+
+.plate-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 15px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  background: #fbfcfb;
+  padding: 11px 13px;
+}
+
+.plate-legend-item {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-soft);
+  font-size: 9px;
+}
+
+.plate-legend-item > span:last-child {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plate-swatch {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--well-color) 72%, #263237);
+  border-radius: 50%;
+  background: var(--well-color);
+}
+
+.plate-legend-more {
+  color: var(--muted);
+  font-size: 9px;
 }
 
 .mapping-toolbar {
@@ -1193,6 +1346,7 @@ dialog::backdrop {
   }
 
   .figure-workspace,
+  .plate-workspace,
   .mapping-workspace {
     padding-right: 12px;
     padding-left: 12px;
@@ -1220,7 +1374,8 @@ dialog::backdrop {
 
   .command-row,
   .field-row.two,
-  .font-grid {
+  .font-grid,
+  .settings-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1269,5 +1424,21 @@ dialog::backdrop {
 
   .figure-workspace[data-view="heatmap"] #plot {
     min-width: 700px;
+  }
+
+  .figure-workspace[data-view="kinetics"] .plot-stage {
+    height: var(--plot-mobile-height, 620px);
+    min-height: 620px;
+    aspect-ratio: auto;
+  }
+
+  .plate-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .plate-scroll {
+    padding: 14px;
   }
 }
