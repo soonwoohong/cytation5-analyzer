@@ -174,23 +174,32 @@
               <input id="y-max" type="number" placeholder="Auto" />
             </label>
 
-            <label class="field">
-              <span>Line palette</span>
-              <select id="line-palette">
-                <option value="publication">Publication vivid</option>
-                <option value="tableau">Tableau 10</option>
-                <option value="okabe">Okabe-Ito</option>
-                <option value="prism">Prism</option>
-                <option value="tol">Tol bright</option>
-                <option value="dark2">Dark 2</option>
-                <option value="set2">Set 2</option>
-                <option value="paired">Paired</option>
-                <option value="viridis">Viridis</option>
-                <option value="turbo">Turbo</option>
-                <option value="pastel">Pastel</option>
-              </select>
-              <span class="palette-preview" id="line-palette-preview"></span>
-            </label>
+            <div class="field-row two">
+              <label class="field">
+                <span>Line palette</span>
+                <select id="line-palette">
+                  <option value="publication">Publication vivid</option>
+                  <option value="tableau">Tableau 10</option>
+                  <option value="okabe">Okabe-Ito</option>
+                  <option value="prism">Prism</option>
+                  <option value="tol">Tol bright</option>
+                  <option value="dark2">Dark 2</option>
+                  <option value="set2">Set 2</option>
+                  <option value="paired">Paired</option>
+                  <option value="viridis">Viridis</option>
+                  <option value="turbo">Turbo</option>
+                  <option value="pastel">Pastel</option>
+                </select>
+                <span class="palette-preview" id="line-palette-preview"></span>
+              </label>
+              <label class="field">
+                <span>NTC color</span>
+                <span class="color-control">
+                  <input id="ntc-color" type="color" value="#000000" />
+                  <output id="ntc-color-value">#000000</output>
+                </span>
+              </label>
+            </div>
 
             <div class="field-row two">
               <label class="field">
@@ -366,6 +375,22 @@
               <i data-lucide="sheet"></i>
               CSV
             </button>
+          </div>
+          <div class="panel-export-controls" id="panel-export-controls">
+            <label class="field">
+              <span>Individual panel</span>
+              <select id="panel-export-select"></select>
+            </label>
+            <div class="panel-export-grid">
+              <button class="button tertiary" id="export-panel-png" type="button">
+                <i data-lucide="image-down"></i>
+                Panel PNG
+              </button>
+              <button class="button tertiary" id="export-panel-svg" type="button">
+                <i data-lucide="file-down"></i>
+                Panel SVG
+              </button>
+            </div>
           </div>
           <div class="settings-grid">
             <button class="button tertiary" id="save-settings" type="button">

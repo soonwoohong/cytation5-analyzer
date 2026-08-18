@@ -159,6 +159,7 @@ const SETTINGS_CONTROL_IDS = [
   "y-min",
   "y-max",
   "line-palette",
+  "ntc-color",
   "line-style",
   "line-width-number",
   "baseline-toggle",
@@ -279,6 +280,7 @@ function bindEvents() {
     "y-min",
     "y-max",
     "line-palette",
+    "ntc-color",
     "line-style",
     "line-width",
     "line-width-number",
@@ -303,6 +305,7 @@ function bindEvents() {
       }
       if (
         id === "line-palette" ||
+        id === "ntc-color" ||
         id === "heatmap-palette" ||
         id === "reverse-palette"
       ) {
@@ -332,6 +335,12 @@ function bindEvents() {
 
   byId("export-png").addEventListener("click", () => exportFigure("png"));
   byId("export-svg").addEventListener("click", () => exportFigure("svg"));
+  byId("export-panel-png").addEventListener("click", () =>
+    exportPanelFigure("png"),
+  );
+  byId("export-panel-svg").addEventListener("click", () =>
+    exportPanelFigure("svg"),
+  );
   byId("export-csv").addEventListener("click", exportCurrentCsv);
   byId("save-settings").addEventListener("click", saveSettings);
   byId("load-settings").addEventListener("click", () =>
@@ -614,6 +623,102 @@ async function renderCurrentView() {
   }
 }
 
+function kineticColorMap(targets, palette) {
+  const coloredTargets = targets.filter((target) => !isNtcSeries(target));
+  return new Map(
+    coloredTargets.map((target, index) => [
+      target,
+      palette[index % palette.length],
+    ]),
+  );
+}
+
+function kineticSeriesColor(label, colors) {
+  if (isNtcSeries(label)) {
+    return normalizeHexColor(byId("ntc-color").value, "#000000");
+  }
+  return colors.get(label) || "#46555B";
+}
+
+function appendKineticSeriesTraces(traces, series, options) {
+  const {
+    colors,
+    errorMode,
+    lineWidth,
+    showLegend,
+    xAxis = "x",
+    yAxis = "y",
+  } = options;
+  const color = kineticSeriesColor(series.target, colors);
+  const x = series.points.map((point) => point.time);
+  const y = series.points.map((point) => point.mean);
+  const sd = series.points.map((point) => Number(point.sd) || 0);
+  const hasSd = sd.some((value) => value > 0);
+  const dash = seriesLineDash(series.target);
+
+  if (errorMode === "band" && hasSd) {
+    traces.push({
+      x,
+      y: y.map((value, index) => value + sd[index]),
+      xaxis: xAxis,
+      yaxis: yAxis,
+      mode: "lines",
+      line: { color, width: 0 },
+      hoverinfo: "skip",
+      showlegend: false,
+      legendgroup: series.target,
+    });
+    traces.push({
+      x,
+      y: y.map((value, index) => value - sd[index]),
+      xaxis: xAxis,
+      yaxis: yAxis,
+      mode: "lines",
+      line: { color, width: 0 },
+      fill: "tonexty",
+      fillcolor: hexToRgba(color, 0.18),
+      hoverinfo: "skip",
+      showlegend: false,
+      legendgroup: series.target,
+    });
+  }
+
+  traces.push({
+    x,
+    y,
+    customdata: series.points.map((point) => [
+      point.n,
+      point.sd,
+      point.sem,
+    ]),
+    xaxis: xAxis,
+    yaxis: yAxis,
+    type: "scatter",
+    mode: "lines",
+    name: series.target,
+    legendgroup: series.target,
+    showlegend: showLegend,
+    line: { color, width: lineWidth, dash },
+    error_y:
+      errorMode === "bars" && hasSd
+        ? {
+            type: "data",
+            array: sd,
+            visible: true,
+            color: hexToRgba(color, 0.82),
+            thickness: 1.1,
+            width: 3,
+          }
+        : undefined,
+    hovertemplate:
+      `<b>${escapeHtml(series.target)}</b><br>` +
+      "Time: %{x:g} min<br>Mean: %{y:,.1f} RFU<br>" +
+      "SD: %{customdata[1]:,.1f}<br>n: %{customdata[0]}<extra></extra>",
+  });
+
+  return hasSd && (errorMode === "band" || errorMode === "bars");
+}
+
 function renderKineticPlot(result) {
   const palette =
     LINE_PALETTES[byId("line-palette").value] || LINE_PALETTES.publication;
@@ -632,9 +737,7 @@ function renderKineticPlot(result) {
     `${Math.max(620, rows * 260 + 250)}px`,
   );
   const targets = result.target_order;
-  const colors = new Map(
-    targets.map((target, index) => [target, palette[index % palette.length]]),
-  );
+  const colors = kineticColorMap(targets, palette);
   const traces = [];
   const annotations = [];
   const legendSeen = new Set();
@@ -662,76 +765,16 @@ function renderKineticPlot(result) {
     const yReference = `${yAxis} domain`;
 
     for (const series of panel.series) {
-      const color = colors.get(series.target) || "#46555B";
-      const x = series.points.map((point) => point.time);
-      const y = series.points.map((point) => point.mean);
-      const sd = series.points.map((point) => Number(point.sd) || 0);
-      const hasSd = sd.some((value) => value > 0);
-      const dash = seriesLineDash(series.target);
-      if (errorMode === "band" && hasSd) {
-        anyUncertainty = true;
-        traces.push({
-          x,
-          y: y.map((value, index) => value + sd[index]),
-          xaxis: xAxis,
-          yaxis: yAxis,
-          mode: "lines",
-          line: { color, width: 0 },
-          hoverinfo: "skip",
-          showlegend: false,
-          legendgroup: series.target,
-        });
-        traces.push({
-          x,
-          y: y.map((value, index) => value - sd[index]),
-          xaxis: xAxis,
-          yaxis: yAxis,
-          mode: "lines",
-          line: { color, width: 0 },
-          fill: "tonexty",
-          fillcolor: hexToRgba(color, 0.18),
-          hoverinfo: "skip",
-          showlegend: false,
-          legendgroup: series.target,
-        });
-      }
-      if (errorMode === "bars" && hasSd) {
-        anyUncertainty = true;
-      }
       const showLegend = !legendSeen.has(series.target);
       legendSeen.add(series.target);
-      traces.push({
-        x,
-        y,
-        customdata: series.points.map((point) => [
-          point.n,
-          point.sd,
-          point.sem,
-        ]),
-        xaxis: xAxis,
-        yaxis: yAxis,
-        type: "scatter",
-        mode: "lines",
-        name: series.target,
-        legendgroup: series.target,
-        showlegend: showLegend,
-        line: { color, width: lineWidth, dash },
-        error_y:
-          errorMode === "bars" && hasSd
-            ? {
-                type: "data",
-                array: sd,
-                visible: true,
-                color: hexToRgba(color, 0.82),
-                thickness: 1.1,
-                width: 3,
-              }
-            : undefined,
-        hovertemplate:
-          `<b>${escapeHtml(series.target)}</b><br>` +
-          "Time: %{x:g} min<br>Mean: %{y:,.1f} RFU<br>" +
-          "SD: %{customdata[1]:,.1f}<br>n: %{customdata[0]}<extra></extra>",
-      });
+      anyUncertainty = appendKineticSeriesTraces(traces, series, {
+        colors,
+        errorMode,
+        lineWidth,
+        showLegend,
+        xAxis,
+        yAxis,
+      }) || anyUncertainty;
     }
 
     annotations.push({
@@ -886,6 +929,7 @@ function renderKineticPlot(result) {
   });
 
   Plotly.react(byId("plot"), traces, layout, plotConfig("kinetic_curves"));
+  updatePanelExportOptions(result);
   byId("plot-kicker").textContent = "Fluorescence intensity over time";
   const includedWells = state.mapping.filter((item) => item.include).length;
   byId("plot-detail").textContent =
@@ -1306,6 +1350,10 @@ function updatePalettePreviews() {
   const linePalette = LINE_PALETTES[byId("line-palette").value];
   byId("line-palette-preview").style.background =
     `linear-gradient(90deg, ${linePalette.join(", ")})`;
+  byId("ntc-color-value").textContent = normalizeHexColor(
+    byId("ntc-color").value,
+    "#000000",
+  );
   let heatmapPalette = HEATMAP_PALETTES[byId("heatmap-palette").value];
   if (byId("reverse-palette").checked) {
     heatmapPalette = [...heatmapPalette].reverse();
@@ -1335,6 +1383,210 @@ function exportFigure(format) {
     height: 900,
     scale: format === "png" ? 2 : 1,
   });
+}
+
+function updatePanelExportOptions(result) {
+  const select = byId("panel-export-select");
+  const previous = select.value;
+  select.replaceChildren();
+  result.panels.forEach((panel, index) => {
+    const option = document.createElement("option");
+    option.value = String(index);
+    option.textContent = panel.crrna;
+    select.append(option);
+  });
+  if ([...select.options].some((option) => option.value === previous)) {
+    select.value = previous;
+  }
+  updateExportAvailability();
+}
+
+async function exportPanelFigure(format) {
+  if (!state.session || !state.kinetics || state.view !== "kinetics") {
+    return;
+  }
+  const panelIndex = Number.parseInt(byId("panel-export-select").value, 10);
+  const panel = state.kinetics.panels[panelIndex];
+  if (!panel || !["png", "svg"].includes(format)) {
+    return;
+  }
+
+  const palette =
+    LINE_PALETTES[byId("line-palette").value] || LINE_PALETTES.publication;
+  const colors = kineticColorMap(state.kinetics.target_order, palette);
+  const traces = [];
+  const options = {
+    colors,
+    errorMode: byId("error-mode").value,
+    lineWidth: clamp(numberValue("line-width-number", 2.5), 0.5, 8),
+    showLegend: true,
+  };
+  panel.series.forEach((series) =>
+    appendKineticSeriesTraces(traces, series, options),
+  );
+
+  const exportPlot = document.createElement("div");
+  exportPlot.setAttribute("aria-hidden", "true");
+  Object.assign(exportPlot.style, {
+    position: "fixed",
+    left: "-10000px",
+    top: "0",
+    width: "1600px",
+    height: "900px",
+    background: "#FFFFFF",
+  });
+  document.body.append(exportPlot);
+  setPanelExportBusy(true);
+
+  try {
+    await Plotly.newPlot(
+      exportPlot,
+      traces,
+      standalonePanelLayout(panel),
+      {
+        staticPlot: true,
+        displayModeBar: false,
+        displaylogo: false,
+        responsive: false,
+      },
+    );
+    await Plotly.downloadImage(exportPlot, {
+      format,
+      filename: figureSlug(
+        figureTitle(),
+        `${panel.crrna}_kinetic_panel`,
+      ),
+      width: 1600,
+      height: 900,
+      scale: format === "png" ? 2 : 1,
+    });
+    showToast(`${panel.crrna} panel saved`);
+  } catch (error) {
+    console.error(error);
+    setStatus(readError(error), "error");
+  } finally {
+    Plotly.purge(exportPlot);
+    exportPlot.remove();
+    setPanelExportBusy(false);
+  }
+}
+
+function standalonePanelLayout(panel) {
+  const fontFamily = byId("font-family").value;
+  const baseFont = clamp(Math.round(numberValue("base-font", 13)), 8, 28);
+  const titleAxisFont = baseFont + 2;
+  const showGrid = byId("grid-toggle").checked;
+  const selectedLegend = byId("legend-position").value;
+  const legendPosition = selectedLegend === "bottom" ? "bottom" : "right";
+  const labels = panel.series.map((series) => series.target);
+  const currentRange = byId("plot")._fullLayout?.yaxis?.range;
+  const yRange = Array.isArray(currentRange) ? [...currentRange] : undefined;
+  const yAxisLabel = byId("baseline-toggle").checked
+    ? "Δ fluorescence intensity (a.u.)"
+    : "Fluorescence intensity (a.u.)";
+
+  return {
+    width: 1600,
+    height: 900,
+    autosize: false,
+    title: {
+      text: escapeHtml(figureTitle()),
+      x: 0.5,
+      y: 0.98,
+      xanchor: "center",
+      font: { family: fontFamily, size: titleAxisFont, color: "#182124" },
+    },
+    annotations: [
+      {
+        x: 0.5,
+        y: 1.055,
+        xref: "paper",
+        yref: "paper",
+        text: escapeHtml(panel.crrna),
+        showarrow: false,
+        xanchor: "center",
+        yanchor: "bottom",
+        font: {
+          family: fontFamily,
+          size: titleAxisFont,
+          color: "#263237",
+        },
+      },
+    ],
+    margin: {
+      l: 120,
+      r:
+        legendPosition === "right"
+          ? estimateLegendMargin(labels, baseFont) + 34
+          : 72,
+      t: 132,
+      b: legendPosition === "bottom" ? 190 : 108,
+    },
+    paper_bgcolor: "#FFFFFF",
+    plot_bgcolor: "#FFFFFF",
+    hovermode: false,
+    showlegend: true,
+    legend: {
+      x: legendPosition === "bottom" ? 0.5 : 1.035,
+      y: legendPosition === "bottom" ? -0.2 : 1,
+      xanchor: legendPosition === "bottom" ? "center" : "left",
+      yanchor: "top",
+      orientation: legendPosition === "bottom" ? "h" : "v",
+      bgcolor: "rgba(255,255,255,0)",
+      borderwidth: 0,
+      font: { family: fontFamily, size: baseFont, color: "#344147" },
+      itemsizing: "constant",
+      tracegroupgap: 4,
+    },
+    xaxis: standalonePanelAxis("Time (min)", {
+      fontFamily,
+      baseFont,
+      titleAxisFont,
+      showGrid,
+    }),
+    yaxis: {
+      ...standalonePanelAxis(yAxisLabel, {
+        fontFamily,
+        baseFont,
+        titleAxisFont,
+        showGrid,
+      }),
+      range: yRange,
+    },
+    font: { family: fontFamily, color: "#263237" },
+  };
+}
+
+function standalonePanelAxis(title, options) {
+  const { fontFamily, baseFont, titleAxisFont, showGrid } = options;
+  return {
+    title: {
+      text: title,
+      font: { family: fontFamily, size: titleAxisFont, color: "#263237" },
+      standoff: 14,
+    },
+    tickfont: { family: fontFamily, size: baseFont, color: "#344147" },
+    showgrid: showGrid,
+    gridcolor: "#E4E8E7",
+    gridwidth: 1,
+    zeroline: false,
+    showline: true,
+    linecolor: "#263237",
+    linewidth: 1.2,
+    ticks: "outside",
+    tickcolor: "#263237",
+    fixedrange: true,
+    automargin: true,
+  };
+}
+
+function setPanelExportBusy(busy) {
+  byId("export-panel-png").disabled = busy;
+  byId("export-panel-svg").disabled = busy;
+  byId("panel-export-select").disabled = busy;
+  if (!busy) {
+    updateExportAvailability();
+  }
 }
 
 function exportCurrentCsv() {
@@ -1514,9 +1766,18 @@ function updateResetZoomVisibility() {
 
 function updateExportAvailability() {
   const isPlotView = state.view === "kinetics" || state.view === "heatmap";
+  const canExportPanel =
+    state.view === "kinetics" && Boolean(state.kinetics?.panels?.length);
   byId("export-png").disabled = !state.session || !isPlotView;
   byId("export-svg").disabled = !state.session || !isPlotView;
   byId("export-csv").disabled = !state.session;
+  byId("panel-export-controls").classList.toggle(
+    "hidden",
+    state.view !== "kinetics",
+  );
+  byId("panel-export-select").disabled = !canExportPanel;
+  byId("export-panel-png").disabled = !canExportPanel;
+  byId("export-panel-svg").disabled = !canExportPanel;
 }
 
 function inferYMaximum(result) {
@@ -1604,9 +1865,16 @@ function seriesLineDash(label) {
   if (selected !== "auto") {
     return selected;
   }
-  return /(^|[^a-z0-9])ntc([^a-z0-9]|$)/i.test(String(label))
-    ? "dash"
-    : "solid";
+  return isNtcSeries(label) ? "dash" : "solid";
+}
+
+function isNtcSeries(label) {
+  return /(^|[^a-z0-9])ntc([^a-z0-9]|$)/i.test(String(label));
+}
+
+function normalizeHexColor(value, fallback) {
+  const normalized = String(value || "").trim().toUpperCase();
+  return /^#[0-9A-F]{6}$/.test(normalized) ? normalized : fallback;
 }
 
 function estimateLegendMargin(labels, fontSize) {

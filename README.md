@@ -19,12 +19,14 @@ upload or store experimental data.
   bars, or no error display.
 - Apply per-well baseline subtraction and customize line width, line style,
   panel count, legend placement, axes, typography, and publication palettes.
-- Automatically render targets containing `NTC` with dashed lines.
+- Automatically render targets containing `NTC` as dashed black lines, with a
+  configurable NTC color.
 - Generate mean-RFU heatmaps at any sampled elapsed time with ten palettes,
   reversible scales, optional annotations, and manual color limits.
 - Inspect mappings as editable tables or visual 96/384-well plate layouts.
-- Export 16:9 figures as PNG or SVG, analysis tables as CSV, and reusable
-  figure settings as JSON.
+- Export 16:9 figures as PNG or SVG, save any crRNA panel as a standalone
+  figure with its own axes and legend, and download analysis tables as CSV or
+  reusable figure settings as JSON.
 
 ## Python Architecture
 
